@@ -728,7 +728,7 @@ function go() {
 if (cluster.isMaster) {
     const workers = {}
     Array.from({ length: threads }, (_, i) => cluster.fork({ core: i % os.cpus().length }));
-    console.log(`NEGAN CSL`);
+    console.log(`30 07 2024 №54`);
 
     cluster.on('exit', (worker) => {
         cluster.fork({ core: worker.id % os.cpus().length });
