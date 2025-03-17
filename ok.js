@@ -16,7 +16,6 @@ if (process.argv.length < 8) {
     process.exit(1);
 }
 
-
 const NORMAL = process.env.NORMAL || "0";
 const target = process.argv[2];
 const time = process.argv[3];
