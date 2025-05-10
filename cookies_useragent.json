@@ -1,0 +1,21 @@
+{
+    "cookies": [
+        {
+            "name": "cf_chl_rc_i",
+            "value": "1",
+            "domain": "113hax.com",
+            "path": "/",
+            "expires": 1742371586,
+            "size": 12,
+            "httpOnly": false,
+            "secure": true,
+            "session": false,
+            "sameSite": "None",
+            "priority": "Medium",
+            "sameParty": false,
+            "sourceScheme": "Secure",
+            "partitionKey": "https://113hax.com"
+        }
+    ],
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/134.0.0.0 Safari/537.36"
+}

